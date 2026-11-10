@@ -1,41 +1,56 @@
+from __future__ import annotations
+
 from importlib.metadata import version as _get_version
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import datetime as dt
+
+    from lxml import etree
 
 
 class Header:
-    def __init__(self, element, identifier, datestamp, setspec, deleted):
+    def __init__(
+        self,
+        element: etree._Element | None,
+        identifier,
+        datestamp: dt.datetime,
+        setspec: list[str],
+        deleted: bool,
+    ):
         self._element = element
         # force identifier to be a string, it might be
         # an lxml.etree._ElementStringResult...
-        self._identifier = str(identifier)
-        self._datestamp = datestamp
-        self._setspec = setspec
-        self._deleted = deleted
+        self._identifier: str = str(identifier)
+        self._datestamp: dt.datetime = datestamp
+        self._setspec: list[str] = setspec
+        self._deleted: bool = deleted
 
-    def element(self):
+    def element(self) -> etree._Element | None:
         return self._element
 
-    def identifier(self):
+    def identifier(self) -> str:
         return self._identifier
 
-    def datestamp(self):
+    def datestamp(self) -> dt.datetime:
         return self._datestamp
 
-    def setSpec(self):
+    def setSpec(self) -> list[str]:
         return self._setspec
 
-    def isDeleted(self):
+    def isDeleted(self) -> bool:
         return self._deleted
 
 
 class Metadata:
-    def __init__(self, element, map):
-        self._element = element
-        self._map = map
+    def __init__(self, element: etree._Element, map: dict):
+        self._element: etree._Element = element
+        self._map: dict = map
 
-    def element(self):
+    def element(self) -> etree._Element:
         return self._element
 
-    def getMap(self):
+    def getMap(self) -> dict:
         return self._map
 
     def getField(self, name):
@@ -47,25 +62,25 @@ class Metadata:
 class Identify:
     def __init__(
         self,
-        repositoryName,
-        baseURL,
-        protocolVersion,
-        adminEmails,
-        earliestDatestamp,
-        deletedRecord,
-        granularity,
-        compression,
-        toolkit_description=True,
+        repositoryName: str,
+        baseURL: str,
+        protocolVersion: str,
+        adminEmails: list[str],
+        earliestDatestamp: dt.datetime,
+        deletedRecord: str,
+        granularity: str,
+        compression: list[str],
+        toolkit_description: bool = True,
     ):
-        self._repositoryName = repositoryName
-        self._baseURL = baseURL
-        self._protocolVersion = protocolVersion
-        self._adminEmails = adminEmails
-        self._earliestDatestamp = earliestDatestamp
-        self._deletedRecord = deletedRecord
-        self._granularity = granularity
-        self._compression = compression
-        self._descriptions = []
+        self._repositoryName: str = repositoryName
+        self._baseURL: str = baseURL
+        self._protocolVersion: str = protocolVersion
+        self._adminEmails: list[str] = adminEmails
+        self._earliestDatestamp: dt.datetime = earliestDatestamp
+        self._deletedRecord: str = deletedRecord
+        self._granularity: str = granularity
+        self._compression: list[str] = compression
+        self._descriptions: list[str] = []
 
         if toolkit_description:
             try:
@@ -84,34 +99,34 @@ class Identify:
                 "</toolkit>"
             )
 
-    def repositoryName(self):
+    def repositoryName(self) -> str:
         return self._repositoryName
 
-    def baseURL(self):
+    def baseURL(self) -> str:
         return self._baseURL
 
-    def protocolVersion(self):
+    def protocolVersion(self) -> str:
         return self._protocolVersion
 
-    def adminEmails(self):
+    def adminEmails(self) -> list[str]:
         return self._adminEmails
 
-    def earliestDatestamp(self):
+    def earliestDatestamp(self) -> dt.datetime:
         return self._earliestDatestamp
 
-    def deletedRecord(self):
+    def deletedRecord(self) -> str:
         return self._deletedRecord
 
-    def granularity(self):
+    def granularity(self) -> str:
         return self._granularity
 
-    def compression(self):
+    def compression(self) -> list[str]:
         return self._compression
 
-    def add_description(self, xml_string):
+    def add_description(self, xml_string) -> None:
         self._descriptions.append(xml_string)
 
-    def descriptions(self):
+    def descriptions(self) -> list[str]:
         return self._descriptions
 
 

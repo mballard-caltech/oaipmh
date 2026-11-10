@@ -1,6 +1,16 @@
+from typing import Protocol
+
 from lxml import etree
 
 from oaipmh import common
+
+
+class MetadataWriterProtocol(Protocol):
+    def __call__(self, element: etree._Element, metadata: common.Metadata) -> None: ...
+
+
+class MetadataReaderProtocol(Protocol):
+    def __call__(self, element: etree._Element) -> common.Metadata: ...
 
 
 class MetadataRegistry:
@@ -14,22 +24,26 @@ class MetadataRegistry:
     """
 
     def __init__(self):
-        self._readers = {}
-        self._writers = {}
+        self._readers: dict[str, MetadataReaderProtocol] = {}
+        self._writers: dict[str, MetadataWriterProtocol] = {}
 
-    def registerReader(self, metadata_prefix, reader):
+    def registerReader(self, metadata_prefix: str, reader: MetadataReaderProtocol):
         self._readers[metadata_prefix] = reader
 
-    def registerWriter(self, metadata_prefix, writer):
+    def registerWriter(self, metadata_prefix: str, writer: MetadataWriterProtocol):
         self._writers[metadata_prefix] = writer
 
-    def hasReader(self, metadata_prefix):
+    def hasReader(self, metadata_prefix: str) -> bool:
         return metadata_prefix in self._readers
 
-    def hasWriter(self, metadata_prefix):
+    def hasWriter(self, metadata_prefix: str) -> bool:
         return metadata_prefix in self._writers
 
-    def readMetadata(self, metadata_prefix, element):
+    def readMetadata(
+        self,
+        metadata_prefix: str,
+        element: etree._Element,
+    ) -> common.Metadata:
         """Turn XML into metadata object.
 
         element - element to read in
@@ -38,7 +52,12 @@ class MetadataRegistry:
         """
         return self._readers[metadata_prefix](element)
 
-    def writeMetadata(self, metadata_prefix, element, metadata):
+    def writeMetadata(
+        self,
+        metadata_prefix: str,
+        element: etree._Element,
+        metadata: common.Metadata,
+    ):
         """Write metadata as XML.
 
         element - ElementTree element to write under
@@ -61,7 +80,7 @@ class MetadataReader:
         self._fields = fields
         self._namespaces = namespaces or {}
 
-    def __call__(self, element):
+    def __call__(self, element) -> common.Metadata:
         map = {}
         # create XPathEvaluator for this element
         xpath_evaluator = etree.XPathEvaluator(element, namespaces=self._namespaces)

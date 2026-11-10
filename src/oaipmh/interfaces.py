@@ -1,5 +1,18 @@
-class IOAI:
-    def getRecord(metadataPrefix, identifier):
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    import datetime as dt
+    from collections.abc import Iterable
+
+    from oaipmh.common import Metadata
+
+    Record = tuple["IHeader", Metadata | None, Any]
+
+
+class IOAI(Protocol):
+    def getRecord(self, metadataPrefix: str, identifier: str) -> Record:
         """Get a record for a metadataPrefix and identifier.
 
         metadataPrefix - identifies metadata set to retrieve
@@ -13,14 +26,22 @@ class IOAI:
 
         Returns a header, metadata, about tuple describing the record.
         """
+        ...
 
-    def identify():
+    def identify(self) -> IIdentify:
         """Retrieve information about the repository.
 
         Returns an Identify object describing the repository.
         """
+        ...
 
-    def listIdentifiers(metadataPrefix, set=None, from_=None, until=None):
+    def listIdentifiers(
+        self,
+        metadataPrefix: str,
+        set: str | None = None,
+        from_: dt.datetime | None = None,
+        until: dt.datetime | None = None,
+    ) -> Iterable[IHeader]:
         """Get a list of header information on records.
 
         metadataPrefix - identifies metadata set to retrieve
@@ -38,7 +59,9 @@ class IOAI:
         Returns an iterable of headers.
         """
 
-    def listMetadataFormats(identifier=None):
+    def listMetadataFormats(
+        self, identifier: str | None = None
+    ) -> Iterable[tuple[str, str, str]]:
         """List metadata formats supported by repository or record.
 
         identifier - identify record for which we want to know all
@@ -56,7 +79,13 @@ class IOAI:
         tuples (each entry in the tuple is a string).
         """
 
-    def listRecords(metadataPrefix, set=None, from_=None, until=None):
+    def listRecords(
+        self,
+        metadataPrefix: str,
+        set: str | None = None,
+        from_: dt.datetime | None = None,
+        until: dt.datetime | None = None,
+    ) -> Iterable[Record]:
         """Get a list of header, metadata and about information on records.
 
         metadataPrefix - identifies metadata set to retrieve
@@ -74,17 +103,18 @@ class IOAI:
         Returns an iterable of header, metadata, about tuples.
         """
 
-    def listSets():
+    def listSets(self) -> Iterable[tuple[str, str, str | None]]:
         """Get a list of sets in the repository.
 
         Should raise error.NoSetHierarchyError if the repository does not
         support sets.
 
-        Returns an iterable of setSpec, setName tuples (strings).
+        Returns an iterable list of tuples(setSpec, setName, setDescription).
+        setSpec and setName are strings. setDescription is a string or None.
         """
 
 
-class IBatchingOAI:
+class IBatchingOAI(Protocol):
     """Very similar to IOAI, but the implementation can be batch-aware.
 
     Methods that support resumption will get two extra arguments,
@@ -92,76 +122,142 @@ class IBatchingOAI:
     requested.
     """
 
-    def getRecord(metadataPrefix, identifier):
-        pass
+    def getRecord(self, metadataPrefix: str, identifier: str) -> Record: ...
 
-    def identify():
-        pass
+    def identify(self) -> IIdentify: ...
 
     def listIdentifiers(
-        metadataPrefix, set=None, from_=None, until=None, cursor=0, batch_size=10
-    ):
-        pass
+        self,
+        metadataPrefix: str,
+        set: str | None = None,
+        from_: dt.datetime | None = None,
+        until: dt.datetime | None = None,
+        cursor: int = 0,
+        batch_size: int = 10,
+    ) -> Iterable[IHeader]: ...
 
-    def listMetadataFormats(identifier=None):
-        pass
+    def listMetadataFormats(
+        self, identifier: str | None = None
+    ) -> Iterable[tuple[str, str, str]]: ...
 
     def listRecords(
-        metadataPrefix, set=None, from_=None, until=None, cursor=0, batch_size=10
-    ):
-        pass
+        self,
+        metadataPrefix: str,
+        set: str | None = None,
+        from_: dt.datetime | None = None,
+        until: dt.datetime | None = None,
+        cursor: int = 0,
+        batch_size: int = 10,
+    ) -> Iterable[Record]: ...
 
-    def listSets():
-        pass
+    def listSets(
+        self, cursor: int = 0, batch_size: int = 10
+    ) -> Iterable[tuple[str, str, str | None]]: ...
 
 
-class IIdentify:
-    def repositoryName():
+class IResumptionOAI(Protocol):
+    """An interface for OAI servers that accept a resumptionToken.
+
+    For all functions that can take a resumptionToken:
+        - if it is passed then all other arguments must be None.
+        - if that token is invalid then the fns raise badResumptionToken.
+    """
+
+    def getRecord(self, metadataPrefix: str, identifier: str) -> Record: ...
+
+    def identify(self) -> IIdentify: ...
+
+    def listIdentifiers(
+        self,
+        metadataPrefix: str | None = None,
+        set: str | None = None,
+        from_: dt.datetime | None = None,
+        until: dt.datetime | None = None,
+        resumptionToken: str | None = None,
+    ) -> tuple[Iterable[IHeader], str | None]: ...
+
+    def listMetadataFormats(
+        self, identifier: str | None = None
+    ) -> Iterable[tuple[str, str, str]]: ...
+
+    def listRecords(
+        self,
+        metadataPrefix: str | None = None,
+        set: str | None = None,
+        from_: dt.datetime | None = None,
+        until: dt.datetime | None = None,
+        resumptionToken: str | None = None,
+    ) -> tuple[Iterable[Record], str | None]: ...
+
+    def listSets(
+        self,
+        resumptionToken: str | None = None,
+    ) -> tuple[Iterable[tuple[str, str, str | None]], str | None]: ...
+
+
+class IIdentify(Protocol):
+    def repositoryName(self) -> str:
         """Name of repository."""
+        ...
 
-    def baseURL():
+    def baseURL(self) -> str:
         """Base URL for OAI-PMH requests."""
+        ...
 
-    def protocolVersion():
+    def protocolVersion(self) -> str:
         """OAI-PMH protocol version (should always be '2.0')"""
+        ...
 
-    def adminEmails():
+    def adminEmails(self) -> list[str]:
         """List of email addresses of repository administrators."""
+        ...
 
-    def earliestDateStamp():
+    def earliestDatestamp(self) -> dt.datetime:
         """The datetime (datestamp) of the earliest record in repository."""
+        ...
 
-    def deletedRecord():
+    def deletedRecord(self) -> str:
         """Way the repository handles deleted records.
 
         Either 'no', 'transient' or 'persistent'.
         """
+        ...
 
-    def granularity():
+    def granularity(self) -> str:
         """Datetime granularity of datestamps in repository.
 
         Either YYYY-MM-DD or YYYY-MM-DDThh:mm:ssZ
         """
+        ...
 
-    def compression():
+    def compression(self) -> list[str]:
         """List of types of compression schemes supported by repository.
 
         'identity' is the 'do-nothing' scheme.
         """
+        ...
+
+    def descriptions(self) -> Iterable[str]:
+        """a list of xml strings that are descriptions of the service."""
+        ...
 
 
-class IHeader:
-    def identifier():
+class IHeader(Protocol):
+    def identifier(self) -> str:
         """Repository-unique identifier of this record."""
+        ...
 
-    def datestamp():
+    def datestamp(self) -> dt.datetime:
         """Datetime of creation, last modification or deletion of the record.
 
         This can be used for selective harvesting.
         """
+        ...
 
-    def setSpec():
+    def setSpec(self) -> list[str]:
         """A list of sets this record is a member of."""
+        ...
 
-    def isDeleted():
+    def isDeleted(self) -> bool:
         """If true, record has been deleted."""
+        ...

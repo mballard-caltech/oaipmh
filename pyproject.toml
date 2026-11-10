@@ -71,3 +71,9 @@ include = [
 exclude = [
     "src/oaipmh/tests",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "types-lxml>=2026.2.16",
+]

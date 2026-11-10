@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from lxml import etree
 from lxml.etree import Element, ElementTree, SubElement
@@ -6,26 +9,34 @@ from lxml.etree import Element, ElementTree, SubElement
 try:
     from urllib.parse import quote, unquote, urlencode
 except ImportError:
-    from urllib import quote, unquote, urlencode
+    from urllib import quote, unquote, urlencode  # ty: ignore[unresolved-import]
 try:
     from urllib.parse import parse_qs
 except ImportError:
-    from urlparse import parse_qs
+    from urlparse import parse_qs  # ty: ignore[unresolved-import]
 import sys
 
 from oaipmh import common, error, metadata, validation
 from oaipmh.datestamp import (
-    DatestampError,
     datestamp_to_datetime,
     datetime_to_datestamp,
 )
+from oaipmh.error import DatestampError
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, MutableMapping
+
+    from oaipmh import interfaces
+
+    NSMAP_TYPE = dict[str | None, str]
+
 
 NS_OAIPMH = "http://www.openarchives.org/OAI/2.0/"
 NS_XSI = "http://www.w3.org/2001/XMLSchema-instance"
 NS_OAIDC = "http://www.openarchives.org/OAI/2.0/oai_dc/"
 NS_DC = "http://purl.org/dc/elements/1.1/"
 
-NSMAP = {
+NSMAP: NSMAP_TYPE = {
     None: NS_OAIPMH,
 }
 
@@ -39,20 +50,28 @@ class XMLTreeServer:
     Takes a server object conforming to the ResumptionOAIPMH interface.
     """
 
-    def __init__(self, server, metadata_registry, nsmap=None):
+    def __init__(
+        self,
+        server: interfaces.IResumptionOAI,
+        metadata_registry: metadata.MetadataRegistry | None,
+        nsmap: NSMAP_TYPE | None = None,
+    ):
         if nsmap is None:
-            nsmap = {}
-        self._nsmap = NSMAP.copy()
+            nsmap: dict[str | None, str] = {}
+        self._nsmap: MutableMapping[str | None, str] = NSMAP.copy()
         self._nsmap.update(nsmap)
-        self._server = server
+        self._server: interfaces.IResumptionOAI = server
         self._metadata_registry = metadata_registry or metadata.global_metadata_registry
 
-    def getRecord(self, **kw):
+    def getRecord(self, **kw) -> etree._ElementTree:
         envelope, e_getRecord = self._outputEnvelope(verb="GetRecord", **kw)
         header, metadata, about = self._server.getRecord(**kw)
         e_record = SubElement(e_getRecord, nsoai("record"))
         self._outputHeader(e_record, header)
         if not header.isDeleted():
+            assert metadata is not None, (
+                f"{header.identifier()}'s metadata is missing, not deleted"
+            )
             self._outputMetadata(e_record, kw["metadataPrefix"], metadata)
         return envelope
 
@@ -65,9 +84,9 @@ class XMLTreeServer:
         )
         return metadata[0]
 
-    def identify(self):
+    def identify(self) -> etree._ElementTree:
         envelope, e_identify = self._outputEnvelope(verb="Identify")
-        identify = self._server.identify()
+        identify: interfaces.IIdentify = self._server.identify()
         e_repositoryName = SubElement(e_identify, nsoai("repositoryName"))
         e_repositoryName.text = identify.repositoryName()
         e_baseURL = SubElement(e_identify, nsoai("baseURL"))
@@ -94,7 +113,7 @@ class XMLTreeServer:
             e_description.append(etree.fromstring(description))
         return envelope
 
-    def listMetadataFormats(self, **kw):
+    def listMetadataFormats(self, **kw) -> etree._ElementTree:
         envelope, e_listMetadataFormats = self._outputEnvelope(
             verb="ListMetadataFormats", **kw
         )
@@ -116,10 +135,12 @@ class XMLTreeServer:
             e_metadataNamespace.text = metadataNamespace
         return envelope
 
-    def listIdentifiers(self, **kw):
+    def listIdentifiers(self, **kw) -> etree._ElementTree:
         envelope, e_listIdentifiers = self._outputEnvelope(verb="ListIdentifiers", **kw)
 
-        def outputFunc(element, headers, token_kw):
+        def outputFunc(
+            element: etree._Element, headers: Iterable[interfaces.IHeader], token_kw
+        ):
             for header in headers:
                 self._outputHeader(element, header)
 
@@ -128,25 +149,28 @@ class XMLTreeServer:
         )
         return envelope
 
-    def listRecords(self, **kw):
+    def listRecords(self, **kw) -> etree._ElementTree:
         envelope, e_listRecords = self._outputEnvelope(verb="ListRecords", **kw)
 
-        def outputFunc(element, records, token_kw):
+        def outputFunc(element, records: Iterable[interfaces.Record], token_kw):
             metadataPrefix = token_kw["metadataPrefix"]
             for header, record_metadata, _about in records:
                 e_record = SubElement(e_listRecords, nsoai("record"))
                 self._outputHeader(e_record, header)
                 if not header.isDeleted():
+                    assert record_metadata is not None, (
+                        f"{header.identifier()}'s metadata is missing, not deleted"
+                    )
                     self._outputMetadata(e_record, metadataPrefix, record_metadata)
                 # XXX about
 
         self._outputResuming(e_listRecords, self._server.listRecords, outputFunc, kw)
         return envelope
 
-    def listSets(self, **kw):
+    def listSets(self, **kw) -> etree._ElementTree:
         envelope, e_listSets = self._outputEnvelope(verb="ListSets", **kw)
 
-        def outputFunc(element, sets, token_kw):
+        def outputFunc(element, sets: Iterable[tuple[str, str, str | None]], token_kw):
             for setSpec, setName, _setDescription in sets:
                 e_set = SubElement(e_listSets, nsoai("set"))
                 e_setSpec = SubElement(e_set, nsoai("setSpec"))
@@ -158,14 +182,14 @@ class XMLTreeServer:
         self._outputResuming(e_listSets, self._server.listSets, outputFunc, kw)
         return envelope
 
-    def handleException(self, exception):
+    def handleException(self, exception) -> etree._ElementTree:
         if isinstance(exception, error.ErrorBase):
             envelope = self._outputErrors([(exception.oainame(), str(exception))])
             return envelope
         # unhandled exception, so raise again
         raise
 
-    def _outputBasicEnvelope(self, **kw):
+    def _outputBasicEnvelope(self, **kw) -> tuple[etree._ElementTree, etree._Element]:
         e_oaipmh = Element(nsoai("OAI-PMH"), nsmap=self._nsmap)
         e_oaipmh.set(
             f"{{{NS_XSI}}}schemaLocation",
@@ -191,12 +215,12 @@ class XMLTreeServer:
         e_request.text = self._server.identify().baseURL()
         return e_tree, e_oaipmh
 
-    def _outputEnvelope(self, **kw):
+    def _outputEnvelope(self, **kw) -> tuple[etree._ElementTree, etree._Element]:
         e_tree, e_oaipmh = self._outputBasicEnvelope(**kw)
         e_element = SubElement(e_oaipmh, nsoai(kw["verb"]))
         return e_tree, e_element
 
-    def _outputErrors(self, errors, **kw):
+    def _outputErrors(self, errors, **kw) -> etree._ElementTree:
         # only pass functional arguments
         e_tree, e_oaipmh = self._outputBasicEnvelope(**kw)
         for error_code, error_msg in errors:
@@ -205,12 +229,18 @@ class XMLTreeServer:
             e_error.text = error_msg
         return e_tree
 
-    def _outputResuming(self, element, input_func, output_func, kw):
+    def _outputResuming(
+        self,
+        element: etree._Element,
+        input_func,
+        output_func,
+        kw: dict,
+    ):
         if "resumptionToken" in kw:
             resumptionToken = kw["resumptionToken"]
             result, token = input_func(resumptionToken=resumptionToken)
             # unpack keywords from resumption token
-            token_kw, dummy = decodeResumptionToken(resumptionToken)
+            token_kw, _ = decodeResumptionToken(resumptionToken)
         else:
             result, token = input_func(**kw)
             # if we don't get results for the first request,
@@ -227,7 +257,7 @@ class XMLTreeServer:
             e_resumptionToken = SubElement(element, nsoai("resumptionToken"))
             e_resumptionToken.text = token
 
-    def _outputHeader(self, element, header):
+    def _outputHeader(self, element: etree._Element, header: interfaces.IHeader):
         e_header = SubElement(element, nsoai("header"))
         if header.isDeleted():
             e_header.set("status", "deleted")
@@ -239,7 +269,12 @@ class XMLTreeServer:
             e = SubElement(e_header, nsoai("setSpec"))
             e.text = set
 
-    def _outputMetadata(self, element, metadata_prefix, metadata):
+    def _outputMetadata(
+        self,
+        element: etree._Element,
+        metadata_prefix: str,
+        metadata: common.Metadata,
+    ):
         e_metadata = SubElement(element, nsoai("metadata"))
         if not self._metadata_registry.hasWriter(metadata_prefix):
             raise error.CannotDisseminateFormatError(
@@ -254,8 +289,15 @@ class ServerBase(common.ResumptionOAIPMH):
     Takes a server object complying with the ResumptionOAIPMH interface.
     """
 
-    def __init__(self, server, metadata_registry=None, nsmap=None):
-        self._tree_server = XMLTreeServer(server, metadata_registry, nsmap)
+    def __init__(
+        self,
+        server: interfaces.IResumptionOAI,
+        metadata_registry: metadata.MetadataRegistry | None = None,
+        nsmap: NSMAP_TYPE | None = None,
+    ):
+        self._tree_server: XMLTreeServer = XMLTreeServer(
+            server, metadata_registry, nsmap
+        )
 
     def handleRequest(self, request_kw):
         """Handles incoming OAI-PMH request.
@@ -359,7 +401,11 @@ class Server(ServerBase):
     """Expects to be initialized with a IOAI server implementation."""
 
     def __init__(
-        self, server, metadata_registry=None, nsmap=None, resumption_batch_size=10
+        self,
+        server: interfaces.IOAI,
+        metadata_registry: metadata.MetadataRegistry | None = None,
+        nsmap: NSMAP_TYPE | None = None,
+        resumption_batch_size: int = 10,
     ):
         super().__init__(
             Resumption(server, resumption_batch_size), metadata_registry, nsmap
@@ -370,7 +416,11 @@ class BatchingServer(ServerBase):
     """Expects to be initialized with a IBatchingOAI server implementation."""
 
     def __init__(
-        self, server, metadata_registry=None, nsmap=None, resumption_batch_size=10
+        self,
+        server: interfaces.IBatchingOAI,
+        metadata_registry: metadata.MetadataRegistry | None = None,
+        nsmap: NSMAP_TYPE | None = None,
+        resumption_batch_size: int = 10,
     ):
         super().__init__(
             BatchingResumption(server, resumption_batch_size), metadata_registry, nsmap
@@ -387,9 +437,9 @@ class Resumption(common.ResumptionOAIPMH):
     time.
     """
 
-    def __init__(self, server, batch_size=10):
-        self._server = server
-        self._batch_size = batch_size
+    def __init__(self, server: interfaces.IOAI, batch_size: int = 10):
+        self._server: interfaces.IOAI = server
+        self._batch_size: int = batch_size
 
     def handleVerb(self, verb, kw):
         # do original query
@@ -430,9 +480,9 @@ class BatchingResumption(common.ResumptionOAIPMH):
     a ResumptionOAIPMH interface.
     """
 
-    def __init__(self, server, batch_size=10):
-        self._server = server
-        self._batch_size = batch_size
+    def __init__(self, server: interfaces.IBatchingOAI, batch_size: int = 10):
+        self._server: interfaces.IBatchingOAI = server
+        self._batch_size: int = batch_size
 
     def handleVerb(self, verb, kw):
         if "resumptionToken" in kw:
@@ -504,7 +554,7 @@ def decodeResumptionToken(token):
     return result, cursor
 
 
-def oai_dc_writer(element, metadata):
+def oai_dc_writer(element: etree._Element, metadata: common.Metadata) -> None:
     e_dc = SubElement(
         element, nsoaidc("dc"), nsmap={"oai_dc": NS_OAIDC, "dc": NS_DC, "xsi": NS_XSI}
     )
